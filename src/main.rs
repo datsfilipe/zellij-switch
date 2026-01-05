@@ -3,42 +3,43 @@ use std::{collections::BTreeMap, path::PathBuf};
 use zellij_tile::prelude::*;
 
 #[derive(Default)]
-struct State {}
+struct State {
+    sessions: Vec<String>,
+}
 
 register_plugin!(State);
 
+#[derive(Default)]
 struct Args {
-    layout: LayoutInfo,
-    session: Option<String>,
+    target: Option<String>,
     cwd: Option<PathBuf>,
+    layout: Option<String>,
 }
 
 fn parse_args(mut parser: Parser) -> Result<Args, lexopt::Error> {
-    let mut temp = Args {
-        layout: LayoutInfo::File("default".to_string()),
-        cwd: None,
-        session: None,
-    };
+    let mut args = Args::default();
 
     while let Some(arg) = parser.next()? {
         match arg {
-            Value(_) => {}
-            Short('c') | Long("cwd") => {
-                let cwd: String = parser.value()?.parse()?;
-                temp.cwd = Option::Some(PathBuf::from(cwd));
+            Long("target") => {
+                args.target = Some(parser.value()?.parse()?);
             }
-            Short('s') | Long("session") => {
-                let session: String = parser.value()?.parse()?;
-                temp.session = Option::Some(session);
+            Long("cwd") | Short('c') => {
+                args.cwd = Some(PathBuf::from(parser.value()?));
             }
-            Short('l') | Long("layout") => {
-                let layout: String = parser.value()?.parse()?;
-                temp.layout = LayoutInfo::File(format!("{}.kdl", layout));
+            Long("layout") | Short('l') => {
+                args.layout = Some(parser.value()?.parse()?);
+            }
+            Value(val) => {
+                let s = val.to_string_lossy();
+                if s != "session-select" && s != "session-index" && args.target.is_none() {
+                    args.target = Some(s.into_owned());
+                }
             }
             _ => {}
         }
     }
-    Ok(temp)
+    Ok(args)
 }
 
 impl ZellijPlugin for State {
@@ -47,20 +48,50 @@ impl ZellijPlugin for State {
             PermissionType::ChangeApplicationState,
             PermissionType::ReadApplicationState,
         ]);
+        subscribe(&[EventType::SessionUpdate]);
+    }
+
+    fn update(&mut self, event: Event) -> bool {
+        if let Event::SessionUpdate(session_infos, _) = event {
+            let active_sessions: Vec<String> =
+                session_infos.iter().map(|s| s.name.clone()).collect();
+
+            self.sessions.retain(|s| active_sessions.contains(s));
+            for name in active_sessions {
+                if !self.sessions.contains(&name) {
+                    self.sessions.push(name);
+                }
+            }
+        }
+        false
     }
 
     fn pipe(&mut self, pipe_message: PipeMessage) -> bool {
-        let payload = pipe_message.payload.unwrap();
-        let parser = lexopt::Parser::from_args(shell_words::split(&payload).unwrap());
-        let args = parse_args(parser).unwrap();
-        let session_name = args.session.unwrap();
+        let payload = pipe_message.payload.unwrap_or_default();
+        let parser = Parser::from_args(shell_words::split(&payload).unwrap_or_default());
 
-        switch_session_with_layout(Option::Some(session_name.as_str()), args.layout, args.cwd);
-        close_self();
-        true
-    }
+        let Ok(args) = parse_args(parser) else {
+            return false;
+        };
+        let Some(target) = args.target else {
+            return false;
+        };
 
-    fn update(&mut self, _: Event) -> bool {
+        let session_name = if let Ok(index) = target.parse::<usize>() {
+            self.sessions.get(index).cloned()
+        } else {
+            Some(target)
+        };
+
+        let layout_to_use = match args.layout {
+            Some(l) => LayoutInfo::File(format!("{}.kdl", l)),
+            None => LayoutInfo::File("default".to_string()),
+        };
+
+        if let Some(name) = session_name {
+            switch_session_with_layout(Some(&name), layout_to_use, args.cwd);
+        }
+
         false
     }
 }
