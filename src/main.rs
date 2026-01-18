@@ -51,21 +51,6 @@ impl ZellijPlugin for State {
         subscribe(&[EventType::SessionUpdate]);
     }
 
-    fn update(&mut self, event: Event) -> bool {
-        if let Event::SessionUpdate(session_infos, _) = event {
-            let active_sessions: Vec<String> =
-                session_infos.iter().map(|s| s.name.clone()).collect();
-
-            self.sessions.retain(|s| active_sessions.contains(s));
-            for name in active_sessions {
-                if !self.sessions.contains(&name) {
-                    self.sessions.push(name);
-                }
-            }
-        }
-        false
-    }
-
     fn pipe(&mut self, pipe_message: PipeMessage) -> bool {
         let payload = pipe_message.payload.unwrap_or_default();
         let parser = Parser::from_args(shell_words::split(&payload).unwrap_or_default());
@@ -73,6 +58,7 @@ impl ZellijPlugin for State {
         let Ok(args) = parse_args(parser) else {
             return false;
         };
+
         let Some(target) = args.target else {
             return false;
         };
@@ -92,6 +78,14 @@ impl ZellijPlugin for State {
             switch_session_with_layout(Some(&name), layout_to_use, args.cwd);
         }
 
+        false
+    }
+
+    fn update(&mut self, event: Event) -> bool {
+        if let Event::SessionUpdate(session_infos, _) = event {
+            self.sessions = session_infos.iter().map(|s| s.name.clone()).collect();
+            self.sessions.sort();
+        }
         false
     }
 }
