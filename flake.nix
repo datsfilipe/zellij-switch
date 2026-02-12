@@ -48,5 +48,24 @@
       overlays.default = final: prev: {
         zellij-switch = self.packages.${prev.system}.default;
       };
+
+      devShells = eachSystem (system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ rust-overlay.overlays.default ];
+          };
+          rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+            extensions = [ "rust-src" "rust-analyzer" ];
+            targets = [ "wasm32-wasip1" ];
+          };
+        in
+        {
+          default = pkgs.mkShell {
+            nativeBuildInputs = [
+              rustToolchain
+            ];
+          };
+        });
     };
 }
