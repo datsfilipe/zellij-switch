@@ -46,7 +46,7 @@
         self.packages.${system}.default);
 
       overlays.default = final: prev: {
-        zellij-switch = self.packages.${prev.system}.default;
+        zellij-switch = self.packages.${prev.stdenv.hostPlatform.system}.default;
       };
 
       devShells = eachSystem (system:
