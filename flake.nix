@@ -1,7 +1,7 @@
 {
   inputs = {
-    nixpkgs.url = "nixpkgs";
     systems.url = "github:nix-systems/default";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
@@ -23,7 +23,7 @@
         {
           default = pkgs.rustPlatform.buildRustPackage {
             pname = "zellij-switch";
-            version = "0.2.0";
+            version = "0.2.1";
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
             
